@@ -76,6 +76,18 @@ check("许可链接 creativecommons",  "creativecommons.org/licenses/by/4.0" in 
 check("标注了改动",               "改编作品" in html or "改动" in html)
 check("页脚有免责声明",           "不构成" in html)
 
+# ---------- 搜索质量：调 node 跑真实算法（search.js 就是浏览器里那一份）----------
+import shutil as _sh, subprocess as _sp
+_node = _sh.which("node")
+_search_out = ""
+if _node:
+    _r = _sp.run([_node, os.path.join(HERE, "test-search.js")],
+                 capture_output=True, text=True, cwd=HERE, encoding="utf-8", errors="replace")
+    _search_out = (_r.stdout or "") + (_r.stderr or "")
+    check("搜索验收 test-search.js 全过", _r.returncode == 0, "exit %d" % _r.returncode, "exit 0")
+else:
+    check("搜索验收（本机没有 node，跳过）", True, "skipped")
+
 # ---------- 输出 ----------
 print(f"\n{'结果':<4}{'检查项':<32}{'实际'}")
 print("─" * 74)
@@ -91,6 +103,10 @@ for name, ok, got, want in results:
 print("─" * 74)
 sz = os.path.getsize(INDEX) / 1024
 if bad:
+    # 搜索没过时把明细打出来，否则看不出来是哪条用例挂了
+    if "test-search" in "".join(n for n, o, g, w in results if not o) and _search_out:
+        print("\n—— test-search.js 明细 ——")
+        print(_search_out)
     print(f"{bad} / {len(results)} 条未通过。")
     sys.exit(1)
 print(f"全部 {len(results)} 条通过。  index.html = {sz:,.0f} KB（单文件，可离线）")

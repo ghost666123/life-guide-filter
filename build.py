@@ -66,7 +66,8 @@ def parse():
             if im:
                 if cur:
                     entries.append(cur)
-                cur = {"sec": sec_n, "n": int(im.group(1)), "title": im.group(2),
+                cur = {"sec": sec_n, "sn": sec_name,
+                       "n": int(im.group(1)), "title": im.group(2),
                        "money": "", "time": "", "will": "", "level": "", "lens": "",
                        "cost": "", "human": "", "gain": "", "grade": "", "src": "", "note": ""}
                 continue
@@ -163,11 +164,18 @@ def main():
     with open(DATA, "w", encoding="utf-8") as f:
         json.dump(corpus, f, ensure_ascii=False, separators=(",", ":"))
 
-    # ---- 从 template.html 生成 index.html（语料内联）----
+    # ---- 从 template.html 生成 index.html（语料 + 搜索内核一起内联）----
     # template.html 是唯一需要手改的文件（UI/CSS/JS）。index.html 是产物，别直接改。
-    if not os.path.exists(TPL):
-        sys.exit("找不到 template.html —— 它是界面源文件。")
+    # search.js 必须在 template.html 之前改好 —— 浏览器和 node 测试跑的是同一份。
+    for need in (TPL, os.path.join(HERE, "search.js")):
+        if not os.path.exists(need):
+            sys.exit("找不到 " + os.path.basename(need))
     html = open(TPL, encoding="utf-8").read()
+    sjs = open(os.path.join(HERE, "search.js"), encoding="utf-8").read()
+    if "/*__SEARCH_JS__*/" not in html:
+        sys.exit("template.html 里找不到 /*__SEARCH_JS__*/ 占位符。")
+    html = html.replace("/*__SEARCH_JS__*/", sjs)
+
     blob = json.dumps(corpus, ensure_ascii=False, separators=(",", ":"))
     new, n = re.subn(r'(<script type="application/json" id="corpus">)(.*?)(</script>)',
                      lambda m: m.group(1) + blob + m.group(3), html, flags=re.S)
@@ -178,7 +186,7 @@ def main():
 
     print(f"\n数据版本 commit {sha[:8]}")
     print(f"  {DATA}    {os.path.getsize(DATA)/1024:,.0f} KB")
-    print(f"  {INDEX}   {os.path.getsize(INDEX)/1024:,.0f} KB  （由 template.html 生成，已内联，双击即开）")
+    print(f"  {INDEX}   {os.path.getsize(INDEX)/1024:,.0f} KB  （语料 + search.js 已内联，双击即开）")
 
 
 if __name__ == "__main__":

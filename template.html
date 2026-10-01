@@ -103,8 +103,12 @@ details.more{position:relative}
 .copy:hover{color:var(--fg)}
 #more{margin:16px 0 4px;font-size:14px;padding:12px 16px;border-radius:10px;
   border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer;width:100%}
-.empty{padding:44px 0;color:var(--fg2);font-size:14.5px;line-height:1.8}
+.empty{padding:44px 0;color:var(--fg2);font-size:14.5px;line-height:1.9}
 .empty b{color:var(--fg)}
+.near{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.nearbtn{border:1px solid var(--line);background:var(--card);color:var(--fg);
+  font-size:13.5px;padding:8px 14px;border-radius:9px;cursor:pointer}
+.nearbtn:hover{border-color:var(--accent);color:var(--accent)}
 
 /* ═══ 应急 ═══ */
 .em{background:var(--warn-soft);border:1px solid var(--warn);border-radius:var(--r);
@@ -196,7 +200,7 @@ code{background:var(--card);border:1px solid var(--line);padding:1px 5px;border-
 
   <div class="result">
     <span class="big" id="big">649</span>
-    <span class="unit">条建议</span>
+    <span class="unit" id="unit">条建议</span>
     <span class="cut" id="cut"></span>
   </div>
 
@@ -248,6 +252,7 @@ code{background:var(--card);border:1px solid var(--line);padding:1px 5px;border-
 </div></footer>
 
 <script type="application/json" id="corpus">{"meta":{"count":0},"sections":[],"entries":[]}</script>
+<script>/*__SEARCH_JS__*/</script>
 <script>
 "use strict";
 const RAW = JSON.parse(document.getElementById('corpus').textContent);
@@ -258,8 +263,8 @@ const REPO = 'https://github.com/eternity4719/HowToLiveBetter/blob/main/';
 E.forEach(e => {
   e.ratio = e.level === '大' ? (e.cs === 0 ? '极高' : (e.cs <= 2 ? '高' : '一般'))
           : e.level === '中' ? (e.cs === 0 ? '高' : '一般') : '一般';
-  e.hay = [e.title, e.human, e.cost, e.gain, e.note, e.src, e.grade].join('\n').toLowerCase();
 });
+const IX = SearchCore.buildIndex(E);   // 搜索索引，只建一次
 
 const $ = id => document.getElementById(id);
 const state = { q:'', money:null, time:null, will:null, lens:'', grade:'', sec:'', sort:'ratio', hideDis:false };
@@ -269,7 +274,8 @@ let shown = PAGE;
 Object.keys(LENS).forEach(k => $('f-lens').add(new Option(LENS[k], k)));
 RAW.sections.forEach(s => $('f-sec').add(new Option(s.n + '. ' + s.name, s.n)));
 
-function match(e){
+/* 筛选条件（不含搜索词）。搜索由 SearchCore 负责。 */
+function passes(e){
   if (state.hideDis && e.dispute) return false;
   if (state.money && e.money !== state.money) return false;
   if (state.time  && e.time  !== state.time ) return false;
@@ -277,10 +283,6 @@ function match(e){
   if (state.lens  && e.lens  !== state.lens ) return false;
   if (state.grade && e.grade !== state.grade) return false;
   if (state.sec   && String(e.sec) !== state.sec) return false;
-  if (state.q){
-    const t = state.q.toLowerCase().split(/\s+/).filter(Boolean);
-    if (!t.every(x => e.hay.includes(x))) return false;
-  }
   return true;
 }
 function sortFn(a,b){
@@ -318,14 +320,45 @@ function itemHTML(e, i){
     + '<div data-full="' + i + '" hidden>' + fullHTML(e) + '</div></div>';
 }
 
+/* 零结果时的兜底：不摆一个空白页，而是给「最接近的几章」当出口 */
+function emptyHTML(){
+  if (!state.q.trim())
+    return '<div class="empty">没有符合条件的。<br><b>少点一个筛选项</b>，就能多看到一些。</div>';
+  const near = SearchCore.search(state.q, E, IX, { thr: 0.12 });
+  const seen = {}, secs = [];
+  for (const h of near){
+    const k = h.entry.sec;
+    if (!seen[k] && h.entry.sec){ seen[k] = 1; secs.push(h.entry); }
+    if (secs.length >= 3) break;
+  }
+  let s = '<div class="empty">书里没有直接讲「<b>' + esc(state.q) + '</b>」的条目。';
+  if (secs.length){
+    s += '<br>主题最接近的是这几章：<div class="near">'
+       + secs.map(e => '<button class="nearbtn" data-sec="' + e.sec + '">'
+           + e.sec + '. ' + esc(e.sn) + '</button>').join('')
+       + '</div>';
+  } else {
+    s += '<br>换个说法试试 —— 比如「押金」「报警」「被裁」。';
+  }
+  return s + '</div>';
+}
+
 function render(reset){
-  const r = E.filter(match).sort(sortFn);
-  const n = E.length - r.length;
+  const searching = state.q.trim().length > 0;
+  let r;
+  if (searching){
+    // 搜索负责相关性排序，筛选条件在其之上叠加，不再重排
+    r = SearchCore.search(state.q, E, IX).filter(h => passes(h.entry)).map(h => h.entry);
+  } else {
+    r = E.filter(passes).sort(sortFn);
+  }
   $('big').textContent = r.length;
-  $('cut').textContent = n ? '（筛掉了 ' + n + ' 条）' : '';
+  $('unit').textContent = searching ? '条结果' : '条建议';
+  $('cut').textContent = searching
+    ? (r.length ? '按相关度排' : '')
+    : (E.length - r.length ? '（筛掉了 ' + (E.length - r.length) + ' 条）' : '');
   if (reset !== false) shown = PAGE;
-  $('list').innerHTML = r.slice(0, shown).map(itemHTML).join('')
-    || '<div class="empty">没有符合条件的。<br><b>少点一个筛选项</b>，或者换个词搜 —— 比如「押金」「报警」。</div>';
+  $('list').innerHTML = (r.length ? r.slice(0, shown).map(itemHTML).join('') : emptyHTML());
   const m = $('more');
   if (r.length > shown){ m.hidden = false; m.textContent = '还有 ' + (r.length - shown) + ' 条，点开看'; }
   else m.hidden = true;
@@ -358,6 +391,12 @@ function copyHandler(ev){
     .then(() => { c.textContent = '已复制'; setTimeout(() => c.textContent = '复制来源', 1400); }).catch(() => {});
 }
 $('list').addEventListener('click', ev => {
+  const nb = ev.target.closest('.nearbtn');
+  if (nb){                                  // 兜底：跳到最接近的那一章
+    state.sec = nb.dataset.sec; state.q = ''; $('q').value = '';
+    $('f-sec').value = nb.dataset.sec;
+    render(); window.scrollTo(0,0); return;
+  }
   if (ev.target.closest('[data-copy]')) return copyHandler(ev);
   const hd = ev.target.closest('.hd'); if (!hd) return;
   const box = $('list').querySelector('[data-full="' + hd.dataset.i + '"]');
