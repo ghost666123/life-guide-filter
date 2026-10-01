@@ -14,6 +14,7 @@ import os, re, sys, json, shutil, subprocess, collections
 
 HERE   = os.path.dirname(os.path.abspath(__file__))
 REPO   = os.path.join(HERE, ".upstream")
+TPL    = os.path.join(HERE, "template.html")
 INDEX  = os.path.join(HERE, "index.html")
 DATA   = os.path.join(HERE, "data", "corpus.json")
 REMOTE = "https://github.com/eternity4719/HowToLiveBetter.git"
@@ -162,18 +163,22 @@ def main():
     with open(DATA, "w", encoding="utf-8") as f:
         json.dump(corpus, f, ensure_ascii=False, separators=(",", ":"))
 
-    # ---- 注入 index.html ----
-    html = open(INDEX, encoding="utf-8").read()
+    # ---- 从 template.html 生成 index.html（语料内联）----
+    # template.html 是唯一需要手改的文件（UI/CSS/JS）。index.html 是产物，别直接改。
+    if not os.path.exists(TPL):
+        sys.exit("找不到 template.html —— 它是界面源文件。")
+    html = open(TPL, encoding="utf-8").read()
     blob = json.dumps(corpus, ensure_ascii=False, separators=(",", ":"))
     new, n = re.subn(r'(<script type="application/json" id="corpus">)(.*?)(</script>)',
                      lambda m: m.group(1) + blob + m.group(3), html, flags=re.S)
     if not n:
-        sys.exit("index.html 里找不到 corpus 数据块，注入失败。")
-    open(INDEX, "w", encoding="utf-8").write(new)
+        sys.exit("template.html 里找不到 corpus 数据块，注入失败。")
+    with open(INDEX, "w", encoding="utf-8") as f:
+        f.write(new)
 
     print(f"\n数据版本 commit {sha[:8]}")
-    print(f"  {DATA}   {os.path.getsize(DATA)/1024:,.0f} KB")
-    print(f"  {INDEX}  {os.path.getsize(INDEX)/1024:,.0f} KB  （已内联，双击即可打开，无需服务器）")
+    print(f"  {DATA}    {os.path.getsize(DATA)/1024:,.0f} KB")
+    print(f"  {INDEX}   {os.path.getsize(INDEX)/1024:,.0f} KB  （由 template.html 生成，已内联，双击即开）")
 
 
 if __name__ == "__main__":
