@@ -1,5 +1,7 @@
 # 高性价比人生指南 · 筛选器
 
+**线上地址：<https://ghost666123.github.io/life-guide-filter/>**
+
 《[高性价比人生指南](https://github.com/eternity4719/HowToLiveBetter)》649 条建议的筛选器。
 **按你愿意投入的钱、时间、毅力，筛掉你做不到的。** 单文件、离线可用、每条都能核对出处。
 
@@ -136,23 +138,28 @@ ratio = 收益=大 ? (cs==0 ? '极高' : cs<=2 ? '高' : '一般')
 
 ---
 
-## 部署（GitHub Pages）
+## 部署
+
+**已经部署好了**：<https://ghost666123.github.io/life-guide-filter/>
+
+配置：仓库 `ghost666123/life-guide-filter`，public，默认分支 `main`，
+Pages → Source = `main` / `/`（root），HTTPS 强制开启。
+
+改完内容后重新发布：
 
 ```bash
-git init && git add . && git commit -m "高性价比人生指南筛选器（CC BY 4.0 改编）"
-git remote add origin git@github.com:<你的用户名>/<仓库名>.git
-git push -u origin main
+python build.py && python verify.py    # 先本地验证
+git add -A && git commit -m "更新语料"
+git push                               # Pages 会自动重建，约 1 分钟
 ```
 
-然后仓库 Settings → Pages → Source 选 `main` / `root`。
-一个仓库名 `docs` 文件夹或根目录都行，`index.html` 在根目录就够。
+查构建状态：
 
-`.gitignore` 建议：
+```bash
+gh api repos/ghost666123/life-guide-filter/pages/builds/latest --jq '.status'
+```
 
-```
-.upstream/
-__pycache__/
-```
+> 免费账号的 Pages **必须 public 仓库**才能用。这是内容要公开的代价，先想清楚再改可见性。
 
 ---
 
@@ -160,12 +167,39 @@ __pycache__/
 
 | 坑 | 现象 | 解法 |
 |---|---|---|
-| Windows curl 证书吊销检查 | `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` | `git -c http.sslVerify=false` 或 `curl --ssl-no-revoke` |
-| `api.github.com` 被劫持 | 返回 301 到主站，`gh` CLI 全废 | 用 `git clone --depth 1`（20 秒 / 6.4 MB） |
-| `raw.githubusercontent` 不稳 | 偶发 502、超时 | 优先 git clone，别依赖逐文件 curl |
+| git **push** 时 TLS 失败 | `schannel: CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` | 见下方「本机 git 配置」 |
+| `git clone` 上游 | 同上 | `git -c http.sslVerify=false clone` |
+| curl 抓 GitHub | `CRYPT_E_NO_REVOCATION_CHECK` | `curl --ssl-no-revoke` |
+| `raw.githubusercontent` 不稳 | 偶发 502、超时 | 优先 `git clone --depth 1`（20 秒 / 6.4 MB） |
 | `file://` 下 fetch | CORS 拦截，页面空白 | **语料必须内联**，这是硬要求 |
-| PDF 提取 | 数字对不上（428→429） | 只用 `book/*.md` |
-| 首屏渲染 649 条 | 页面重、截图工具会超时 | 已做分页，首屏 60 条 |
+| PDF 提取 | 数字对不上（证据 A 数出 429，实际 428） | 只用 `book/*.md` |
+| 首屏渲染 649 条 | 页面重，截图工具会超时 | 已做分页，首屏 60 条 |
+| SSH（22 端口） | `Connection refused` | 走 HTTPS；本机已配 `gh-proxy.com` 做 fetch |
+
+**关于 `.upstream/`**：本地副本，已加进 `.gitignore`。删掉不影响，`build.py` 会重建。
+
+### 本机 git 配置（这台机器专属，已设好，不用重做）
+
+`C:\Users\Lenovo` 这台机器上直连 `github.com` 的 TLS 会挂在 Windows 证书吊销检查上。
+`http.schannelCheckRevoke=false` **无效**，`http.sslBackend openssl` 也验不过直连。
+最终可用的是仓库级：
+
+```bash
+git config http.sslVerify false     # 仅本仓库
+```
+
+这是**安全性降级**（跳过 TLS 证书校验）。换机器或换网络时应该先试
+`git config http.sslBackend openssl` + 正确的 CA 证书包；只有在直连确实不通时才退到 `sslVerify false`。
+
+另外本机全局配了 URL 重写，fetch 走代理、push 直连：
+
+```
+url.https://gh-proxy.com/https://github.com/.insteadof  https://github.com/
+url.https://github.com/.pushinsteadof                   https://github.com/
+```
+
+**`gh` CLI 是可用的**（`gh api user` 正常）。网上那种「api.github.com 被劫持、gh 全废」的说法
+在本机不成立 —— 那是其他沙箱环境的限制，别照搬。
 
 ---
 
